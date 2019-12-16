@@ -15,12 +15,12 @@ resolvers += "Artima Maven Repository" at "http://repo.artima.com/releases"
 scalafixDependencies in ThisBuild += "org.scalatest" %% "autofix" % "3.1.0.0" 
 addCompilerPlugin(scalafixSemanticdb) // enable SemanticDB
 
-lazy val root = (project in file("."))
+lazy val main = (project in file("."))
   .settings(
     organization := "com.dungeonMaster",
     name := "dungeonmasterapi",
     version := "0.0.1-SNAPSHOT",
-    scalaVersion := "2.12.8",
+    scalaVersion := "2.13.0",
     libraryDependencies += "com.typesafe" % "config" % "1.4.0",
     libraryDependencies ++= Seq(
       "org.http4s"      %% "http4s-blaze-server" % Http4sVersion,
