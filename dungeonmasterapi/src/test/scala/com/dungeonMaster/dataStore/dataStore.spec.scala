@@ -1,20 +1,13 @@
 package com.dungeonMaster.dungeonmasterapi
 
 import awscala._, dynamodbv2._
-import org.scalatest.FunSpec
-import org.scalacheck._
 import org.scalamock.scalatest.MockFactory
-import cats.effect.{ExitCode, IO, IOApp, Async}
 import org.scalatest.funspec.AnyFunSpec
 import _root_.awscala.dynamodbv2.DynamoDB
 import awscala._, dynamodbv2._
-import cats.implicits._
-import cats.data.EitherT
-import cats.effect._
-import cats.syntax.all._
-import scala.concurrent.duration._
-import cats._
 import scala.concurrent.ExecutionContext
+import cats.effect._
+import cats.effect.{IO, Async}
 
 class DynamoDataStoreTest extends AnyFunSpec with MockFactory {
   implicit val ecc = ExecutionContext.global
@@ -44,30 +37,41 @@ class DynamoDataStoreTest extends AnyFunSpec with MockFactory {
       }
     }
     describe("Connect") {
-      it("Should connect given a valid region and table name") {
-        val validRegion = implicitly[USEAST1]
-        val testRegion: Option[AWSRegion] = Some(validRegion)
-        val randomTableName = "testTableName"
-        val tableName = Some(randomTableName)
-        val testDynamoDataStoreWithConfig = testDynamoDataStore.addRegion(testRegion).addTableName(tableName)
+      describe("Successful connection") {
+        it("Should connect given a valid region and table name") {
+          val validRegion = implicitly[USEAST1]
+          val testRegion: Option[AWSRegion] = Some(validRegion)
+          val randomTableName = "testTableName"
+          val tableName = Some(randomTableName)
+          val testDynamoDataStoreWithConfig = testDynamoDataStore.addRegion(testRegion).addTableName(tableName)
 
-        val mockDynamo = mock[DynamoDB]
-        val mockConfiguredTable = mock[DynamoDB]
-        val mockTable = mock[Table]
+          implicit val mockDynamo = mock[DynamoDB]
+          val mockConfiguredTable = mock[DynamoDB]
+          val mockTable = mock[Table]
 
-        (mockConfiguredTable.table _)
+          (mockConfiguredTable.table _)
           .expects(randomTableName)
           .returning(Some(mockTable))
 
-        (mockDynamo.at _)
+          (mockDynamo.at _)
           .expects(validRegion.region)
           .returning(mockConfiguredTable)
 
-        val dynamoDataStore = testDynamoDataStoreWithConfig.connect[IO](dynamoDbProxy = mockDynamo, ec = ecc,timer = timer, cf = cs)
-        // , timer = timer, cf = cs
+          val dynamoDataStore = testDynamoDataStoreWithConfig.connect[IO]
 
-        val connected = dynamoDataStore.value.unsafeRunSync()
-        assert(connected.isInstanceOf[Right[_,_]])
+          val connected = dynamoDataStore.value.unsafeRunSync()
+          assert(connected.isInstanceOf[Right[_,_]])
+        }
+      }
+      describe("Error when connecting") {
+        it("Should error when connecting when region and tablename is not specified") {
+
+          implicit val mockDynamo = mock[DynamoDB]
+          val dynamoDataStore = testDynamoDataStore.connect[IO]
+          val connected = dynamoDataStore.value.unsafeRunSync()
+          
+          assert(true)
+        }
       }
     }
   }
