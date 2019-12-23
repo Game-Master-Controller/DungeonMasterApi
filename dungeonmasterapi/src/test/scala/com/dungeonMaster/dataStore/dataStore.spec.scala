@@ -70,6 +70,30 @@ class DynamoDataStoreTest extends AnyFunSpec with MockFactory {
           val connected = dynamoDataStore.value.unsafeRunSync()
           assert(connected.left.get == "Neither the tablename or region is specificed")
         }
+
+        it("Should error when connecting when tablename is not specified but the region is") {
+          implicit val mockDynamo = mock[DynamoDB]
+
+          val validRegion = implicitly[USEAST1]
+          val testRegion: Option[AWSRegion] = Some(validRegion)
+
+          val testDynamoDataStoreWithRegion = testDynamoDataStore.addRegion(testRegion)
+          val connected = testDynamoDataStoreWithRegion.connect[IO].value.unsafeRunSync()
+
+          assert(connected.left.get == "The tablename is not specified")
+        }
+
+        it("Should error when connecting when the region is not specified but the tablename is") {
+          implicit val mockDynamo = mock[DynamoDB]
+
+          val randomTableName = "testTableName"
+          val tableName = Some(randomTableName)
+          
+          val testDynamoDataStoreWithTable = testDynamoDataStore.addTableName(tableName)
+          val connected = testDynamoDataStoreWithTable.connect[IO].value.unsafeRunSync()
+
+          assert(connected.left.get == "The region is not specififed")
+        }
       }
     }
   }
