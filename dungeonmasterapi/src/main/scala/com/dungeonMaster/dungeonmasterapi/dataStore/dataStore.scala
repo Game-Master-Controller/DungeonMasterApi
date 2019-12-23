@@ -5,8 +5,17 @@ import awscala._, dynamodbv2._
 import cats.data.EitherT
 import scala.language.higherKinds
 
+/*
+TODO: 
+
+1. Rename DynamoDataStore to Async*
+2. Refactor tests
+3. Refactor method type parameters to class level or rememove class level type
+4. Consider errors when putting to table? 
+*/
+
 abstract class DataStore[F[_]] {
-  def createEntry(values: Map[String, String]): F[NetworkResponse]
+  def createEntry[F[+_]: Async](index: String, values:(String, Any)* )(implicit dynamoDbProxy: DynamoDB): EitherT[F, String, String]
 }
 
 abstract class DynamoDataStore[F[_]: Async] extends DataStore[F] {
@@ -16,7 +25,7 @@ abstract class DynamoDataStore[F[_]: Async] extends DataStore[F] {
   def addTableName(tableName: Option[String]): DynamoDataStore[F]
   def addRegion(region: Option[AWSRegion]): DynamoDataStore[F]
   def connect[F[+_]: Async](implicit dynamoDbProxy: DynamoDB): EitherT[F, String, DynamoDataStore[F]]
-  def createEntry(values: Map[String, String]): F[NetworkResponse] = ???
+  def createEntry[F[+_]: Async](index: String, values:(String, Any)* )(implicit dynamoDbProxy: DynamoDB): EitherT[F, String, String]
 }
 
 object DynamoDataStore {
@@ -27,7 +36,24 @@ object DynamoDataStore {
       val tableName: Option[String] = givenTableName
       def addTableName(tableName: Option[String]): DynamoDataStore[F] = constructor[F](table, givenRegion, tableName)
       def addRegion(providedRegion: Option[AWSRegion]): DynamoDataStore[F] = constructor[F](table, providedRegion, givenTableName)
-      override def createEntry(values: Map[String, String]): F[NetworkResponse] = ???
+      def createEntry[F[+_]: Async](index: String, values:(String, Any)* )(implicit dynamoDbProxy: DynamoDB): EitherT[F, String, String] = {
+        val mabyTable = dynamoTable match {
+          case None => Left("Table not connected")
+          case Some(dynamoTable) => Right(dynamoTable)
+        }
+        val res: F[Either[String, String]] = Async[F].async { cb =>
+          val putToTableIfThere = for {
+            tbl <- mabyTable
+            _ = tbl.put(index, values)
+          } yield tbl
+          val errorOrDynamodb: Either[String, String] = putToTableIfThere match {
+            case Left(errMsg) => Left(errMsg)
+            case Right(_) => Right(s"Successful entry of $index")
+          }
+          cb(Right(errorOrDynamodb))
+        }
+        EitherT(res)
+      }
       def connect[F[+_]: Async](implicit dynamoDbProxy: DynamoDB): EitherT[F, String, DynamoDataStore[F]] = {
         val config: Either[String ,Tuple2[AWSRegion, String]] = mapConfigToEither(region, tableName)
         val mabyTable: EitherT[F, String, Table] = querryTable[F](config, dynamoDbProxy)

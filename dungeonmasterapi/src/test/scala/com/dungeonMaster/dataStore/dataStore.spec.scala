@@ -36,7 +36,7 @@ class DynamoDataStoreTest extends AnyFunSpec with MockFactory {
         assert(dynamoDataStoreWithTableName.tableName == tableName)
       }
     }
-    describe("Connect") {
+    describe("connect") {
       describe("Successful connection") {
         it("Should connect given a valid region and table name") {
           val validRegion = implicitly[USEAST1]
@@ -118,6 +118,39 @@ class DynamoDataStoreTest extends AnyFunSpec with MockFactory {
 
           val connected = dynamoDataStore.value.unsafeRunSync()
           assert(connected.left.get == "Table Doesn't Exist")
+        }
+      }
+    }
+    describe("createEntry") {
+      describe("DynamoDB proxy connected successfully") {
+        it("Should add an entry to the data storage and return a successful response") {
+          implicit val mockDynamo = mock[DynamoDB]
+          val mockConfiguredTable = mock[DynamoDB]
+          val validRegion = implicitly[USEAST1]
+          val testRegion: Option[AWSRegion] = Some(validRegion)
+          val randomTableName = "testTableName"
+          val tableName = Some(randomTableName)
+          val index = "indexName"
+          val testEntry = "index" -> "value"
+          val testDynamoDataStoreWithConfig = testDynamoDataStore.addRegion(testRegion).addTableName(tableName)
+
+          val mockTable = stub[Table]
+
+          (mockConfiguredTable.table _)
+            .expects(randomTableName)
+            .returning(Some(mockTable))
+
+          (mockDynamo.at _)
+            .expects(validRegion.region)
+            .returning(mockConfiguredTable)
+
+          val dynamoDataStore = testDynamoDataStoreWithConfig.connect[IO]
+
+          val connected = dynamoDataStore.value.unsafeRunSync()
+          val connectedDynamoDataStore = connected.right.get          
+
+          val response = connectedDynamoDataStore.createEntry[IO](index, "atb" -> "asdf").value.unsafeRunSync()
+          assert(response.right.get == s"Successful entry of $index")
         }
       }
     }
