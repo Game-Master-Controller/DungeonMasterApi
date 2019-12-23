@@ -152,6 +152,22 @@ class DynamoDataStoreTest extends AnyFunSpec with MockFactory {
           val response = connectedDynamoDataStore.createEntry[IO](index, "atb" -> "asdf").value.unsafeRunSync()
           assert(response.right.get == s"Successful entry of $index")
         }
+
+        it("Should return an error after trying to add an entry without configuring region or tablename") {
+          implicit val mockDynamo = mock[DynamoDB]
+          val mockConfiguredTable = mock[DynamoDB]
+          val validRegion = implicitly[USEAST1]
+          val testRegion: Option[AWSRegion] = Some(validRegion)
+          val randomTableName = "testTableName"
+          val tableName = Some(randomTableName)
+          val index = "indexName"
+          val testEntry = "index" -> "value"
+          val testDynamoDataStoreWithout = testDynamoDataStore
+
+          val dynamoDataStore = testDynamoDataStoreWithout.createEntry[IO](index, "atb" -> "asdf").value.unsafeRunSync()
+
+          assert(dynamoDataStore.left.get == "Table not connected")
+        }
       }
     }
   }
