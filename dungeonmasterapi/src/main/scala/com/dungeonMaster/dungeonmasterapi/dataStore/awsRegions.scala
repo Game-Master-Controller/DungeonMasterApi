@@ -11,4 +11,6 @@ case class USEAST1(regionName: String = "us-east-1", region: Region = Region.US_
 
 object AWSRegion {
   implicit val usEast1 = USEAST1()
+
+  def getRegion(regionName: String): AWSRegion = ???
 }
