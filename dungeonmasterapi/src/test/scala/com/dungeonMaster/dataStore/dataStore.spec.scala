@@ -14,25 +14,25 @@ class DynamoDataStoreTest extends AnyFunSpec with MockFactory {
   implicit val timer: Timer[IO] = IO.timer(ExecutionContext.global)
   implicit val cs: ContextShift[IO] = IO.contextShift(implicitly[ExecutionContext])
 
-  val testDynamoDataStore: DynamoDataStore[IO] = implicitly[DynamoDataStore[IO]]
+  val testDynamoDataFacade: DynamoDBFacade[IO] = DynamoDataStoreConfig.apply[IO]
   describe("DynamoDataStore") {
     describe("apply") {
       it("should have a base DynamoDataStore") {
-        assert(testDynamoDataStore.dynamoTable == None)
-        assert(testDynamoDataStore.region == None)
+        assert(testDynamoDataFacade.dynamoTable == None)
+        assert(testDynamoDataFacade.region == None)
       }
     }
     describe("addRegion") {
       it("Should create a DynamoDataStore with a region given") {
         val testRegion:Option[AWSRegion] = Some(implicitly[USEAST1])
-        val dynamoDataStoreWithRegion = testDynamoDataStore.addRegion(testRegion)
+        val dynamoDataStoreWithRegion = testDynamoDataFacade.addRegion(testRegion)
         assert(dynamoDataStoreWithRegion.region == testRegion)
       }
     }
     describe("addTableName") {
       it("Should create a DynamoDataStore with a table name given") {
         val tableName = Some("testTableName")
-        val dynamoDataStoreWithTableName = testDynamoDataStore.addTableName(tableName)
+        val dynamoDataStoreWithTableName = testDynamoDataFacade.addTableName(tableName)
         assert(dynamoDataStoreWithTableName.tableName == tableName)
       }
     }
@@ -43,7 +43,7 @@ class DynamoDataStoreTest extends AnyFunSpec with MockFactory {
           val testRegion: Option[AWSRegion] = Some(validRegion)
           val randomTableName = "testTableName"
           val tableName = Some(randomTableName)
-          val testDynamoDataStoreWithConfig = testDynamoDataStore.addRegion(testRegion).addTableName(tableName)
+          val testDynamoDataFacadeWithConfig = testDynamoDataFacade.addRegion(testRegion).addTableName(tableName)
 
           implicit val mockDynamo = mock[DynamoDB]
           val mockConfiguredTable = mock[DynamoDB]
@@ -57,7 +57,7 @@ class DynamoDataStoreTest extends AnyFunSpec with MockFactory {
           .expects(validRegion.region)
           .returning(mockConfiguredTable)
 
-          val dynamoDataStore = testDynamoDataStoreWithConfig.connect[IO]
+          val dynamoDataStore = testDynamoDataFacadeWithConfig.connect
 
           val connected = dynamoDataStore.value.unsafeRunSync()
           assert(connected.isInstanceOf[Right[_,_]])
@@ -66,7 +66,7 @@ class DynamoDataStoreTest extends AnyFunSpec with MockFactory {
       describe("Error when connecting") {
         it("Should error when connecting when region and tablename is not specified") {
           implicit val mockDynamo = mock[DynamoDB]
-          val dynamoDataStore = testDynamoDataStore.connect[IO]
+          val dynamoDataStore = testDynamoDataFacade.connect
           val connected = dynamoDataStore.value.unsafeRunSync()
           assert(connected.left.get == "Neither the tablename or region is specificed")
         }
@@ -77,8 +77,8 @@ class DynamoDataStoreTest extends AnyFunSpec with MockFactory {
           val validRegion = implicitly[USEAST1]
           val testRegion: Option[AWSRegion] = Some(validRegion)
 
-          val testDynamoDataStoreWithRegion = testDynamoDataStore.addRegion(testRegion)
-          val connected = testDynamoDataStoreWithRegion.connect[IO].value.unsafeRunSync()
+          val testDynamoDataFacadeWithRegion = testDynamoDataFacade.addRegion(testRegion)
+          val connected = testDynamoDataFacadeWithRegion.connect.value.unsafeRunSync()
 
           assert(connected.left.get == "The tablename is not specified")
         }
@@ -89,8 +89,8 @@ class DynamoDataStoreTest extends AnyFunSpec with MockFactory {
           val randomTableName = "testTableName"
           val tableName = Some(randomTableName)
           
-          val testDynamoDataStoreWithTable = testDynamoDataStore.addTableName(tableName)
-          val connected = testDynamoDataStoreWithTable.connect[IO].value.unsafeRunSync()
+          val testDynamoDataFacadeWithTable = testDynamoDataFacade.addTableName(tableName)
+          val connected = testDynamoDataFacadeWithTable.connect.value.unsafeRunSync()
 
           assert(connected.left.get == "The region is not specififed")
         }
@@ -100,7 +100,7 @@ class DynamoDataStoreTest extends AnyFunSpec with MockFactory {
           val testRegion: Option[AWSRegion] = Some(validRegion)
           val randomWrongTableName = "tableThatDoesntExist"
           val tableName = Some(randomWrongTableName)
-          val testDynamoDataStoreWithConfig = testDynamoDataStore.addRegion(testRegion).addTableName(tableName)
+          val testDynamoDataFacadeWithConfig = testDynamoDataFacade.addRegion(testRegion).addTableName(tableName)
 
           implicit val mockDynamo = mock[DynamoDB]
           val mockConfiguredTable = mock[DynamoDB]
@@ -114,7 +114,7 @@ class DynamoDataStoreTest extends AnyFunSpec with MockFactory {
           .expects(validRegion.region)
           .returning(mockConfiguredTable)
 
-          val dynamoDataStore = testDynamoDataStoreWithConfig.connect[IO]
+          val dynamoDataStore = testDynamoDataFacadeWithConfig.connect
 
           val connected = dynamoDataStore.value.unsafeRunSync()
           assert(connected.left.get == "Table Doesn't Exist")
@@ -132,7 +132,7 @@ class DynamoDataStoreTest extends AnyFunSpec with MockFactory {
           val tableName = Some(randomTableName)
           val index = "indexName"
           val testEntry = "index" -> "value"
-          val testDynamoDataStoreWithConfig = testDynamoDataStore.addRegion(testRegion).addTableName(tableName)
+          val testDynamoDataFacadeWithConfig = testDynamoDataFacade.addRegion(testRegion).addTableName(tableName)
 
           val mockTable = stub[Table]
 
@@ -144,12 +144,12 @@ class DynamoDataStoreTest extends AnyFunSpec with MockFactory {
             .expects(validRegion.region)
             .returning(mockConfiguredTable)
 
-          val dynamoDataStore = testDynamoDataStoreWithConfig.connect[IO]
+          val dynamoDataStore = testDynamoDataFacadeWithConfig.connect
 
           val connected = dynamoDataStore.value.unsafeRunSync()
           val connectedDynamoDataStore = connected.right.get          
 
-          val response = connectedDynamoDataStore.createEntry[IO](index, "atb" -> "asdf").value.unsafeRunSync()
+          val response = connectedDynamoDataStore.submitEntry(index, Some(List("atb" -> "asdf"))).value.unsafeRunSync()
           assert(response.right.get == s"Successful entry of $index")
         }
 
@@ -162,9 +162,9 @@ class DynamoDataStoreTest extends AnyFunSpec with MockFactory {
           val tableName = Some(randomTableName)
           val index = "indexName"
           val testEntry = "index" -> "value"
-          val testDynamoDataStoreWithout = testDynamoDataStore
+          val testDynamoDataFacadeWithout = testDynamoDataFacade
 
-          val dynamoDataStore = testDynamoDataStoreWithout.createEntry[IO](index, "atb" -> "asdf").value.unsafeRunSync()
+          val dynamoDataStore = testDynamoDataFacadeWithout.submitEntry(index, Some(List("atb" -> "asdf"))).value.unsafeRunSync()
 
           assert(dynamoDataStore.left.get == "Table not connected")
         }

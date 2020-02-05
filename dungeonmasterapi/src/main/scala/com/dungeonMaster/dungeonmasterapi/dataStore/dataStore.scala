@@ -14,29 +14,41 @@ TODO:
 4. Consider errors when putting to table? 
 */
 
-abstract class DataStore[F[_]] {
-  def createEntry[F[+_]: Async](index: String, values:(String, Any)* )(implicit dynamoDbProxy: DynamoDB): EitherT[F, String, String]
+abstract class DataStore[F[+_], B] {
+  def createEntry(index: String, values:Option[Seq[(String, Any)]])(implicit dependency: B): EitherT[F, String, String]
 }
 
-abstract class DynamoDataStore[F[_]: Async] extends DataStore[F] {
+object DynamoDataStore extends DataStore[IO, DynamoDBFacade[IO]] {
+  lazy implicit val dynamo: DynamoDB = DynamoDB()
+  lazy val validRegion = implicitly[USEAST1]
+  lazy val region: Option[AWSRegion] = Some(validRegion)
+  lazy val facade = DynamoDataStoreConfig.apply[IO]
+  implicit lazy val connectedFacade = facade.addRegion(region).connect.value.unsafeRunSync().getOrElse(() => throw new Exception("Failed to Connect to Dynamo Table"))
+
+  def createEntry(index: String, values:Option[Seq[(String, Any)]])(implicit dependency: DynamoDBFacade[IO]): EitherT[IO, String, String] = {
+    import com.dungeonMaster.dungeonmasterapi.USEAST1
+    dependency.submitEntry(index, values)
+  }
+}
+
+abstract class DynamoDBFacade[F[_]: Async] {
   val dynamoTable: Option[Table]
   val region: Option[AWSRegion]
   val tableName: Option[String]
-  def addTableName(tableName: Option[String]): DynamoDataStore[F]
-  def addRegion(region: Option[AWSRegion]): DynamoDataStore[F]
-  def connect[F[+_]: Async](implicit dynamoDbProxy: DynamoDB): EitherT[F, String, DynamoDataStore[F]]
-  def createEntry[F[+_]: Async](index: String, values:(String, Any)* )(implicit dynamoDbProxy: DynamoDB): EitherT[F, String, String]
+  def addTableName(tableName: Option[String]): DynamoDBFacade[F]
+  def addRegion(region: Option[AWSRegion]): DynamoDBFacade[F]
+  def connect(implicit dynamoDbProxy: DynamoDB): EitherT[F, String, DynamoDBFacade[F]]
+  def submitEntry(index: String, values:Option[Seq[(String, Any)]])(implicit dynamoDbProxy: DynamoDB): EitherT[F, String, String]
 }
 
-object DynamoDataStore {
-
-  private def constructor[F[+_]: Async](table: Option[Table] = None, givenRegion: Option[AWSRegion] = None, givenTableName: Option[String] = None): DynamoDataStore[F] = new DynamoDataStore[F] {
+object DynamoDataStoreConfig {
+  private def constructor[F[+_]: Async](table: Option[Table] = None, givenRegion: Option[AWSRegion] = None, givenTableName: Option[String] = None): DynamoDBFacade[F] = new DynamoDBFacade[F] {
       val dynamoTable: Option[Table] = table
       val region: Option[AWSRegion] = givenRegion
       val tableName: Option[String] = givenTableName
-      def addTableName(tableName: Option[String]): DynamoDataStore[F] = constructor[F](table, givenRegion, tableName)
-      def addRegion(providedRegion: Option[AWSRegion]): DynamoDataStore[F] = constructor[F](table, providedRegion, givenTableName)
-      def createEntry[F[+_]: Async](index: String, values:(String, Any)* )(implicit dynamoDbProxy: DynamoDB): EitherT[F, String, String] = {
+      def addTableName(tableName: Option[String]): DynamoDBFacade[F] = constructor[F](table, givenRegion, tableName)
+      def addRegion(providedRegion: Option[AWSRegion]): DynamoDBFacade[F] = constructor[F](table, providedRegion, givenTableName)
+      def submitEntry(index: String, values:Option[Seq[(String, Any)]])(implicit dynamoDbProxy: DynamoDB): EitherT[F, String, String] = {
         val mabyTable = dynamoTable match {
           case None => Left("Table not connected")
           case Some(dynamoTable) => Right(dynamoTable)
@@ -54,7 +66,7 @@ object DynamoDataStore {
         }
         EitherT(res)
       }
-      def connect[F[+_]: Async](implicit dynamoDbProxy: DynamoDB): EitherT[F, String, DynamoDataStore[F]] = {
+      def connect(implicit dynamoDbProxy: DynamoDB): EitherT[F, String, DynamoDBFacade[F]] = {
         val config: Either[String ,Tuple2[AWSRegion, String]] = mapConfigToEither(region, tableName)
         val mabyTable: EitherT[F, String, Table] = querryTable[F](config, dynamoDbProxy)
         for {
@@ -63,7 +75,8 @@ object DynamoDataStore {
         } yield newDynamoStore
       }
   }
-  implicit def apply[F[+_]: Async]: DynamoDataStore[F] = constructor[F]()
+
+implicit def apply[F[+_]: Async]: DynamoDBFacade[F] = constructor[F]()
 
   private def querryTable[F[+_]: Async](config: Either[String ,Tuple2[AWSRegion, String]], dynamoDbProxy: DynamoDB): EitherT[F, String, Table] = {
     val cbResponse: F[Either[String, Table]] = Async[F].async { cb =>
