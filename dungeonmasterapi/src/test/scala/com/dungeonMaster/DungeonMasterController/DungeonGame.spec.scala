@@ -10,6 +10,7 @@ import cats.effect._
 import cats.effect.{IO}
 import com.dungeonMaster.dungeonmasterapi.Execs.GameExec
 import cats.data.EitherT
+import com.dungeonMaster.dungeonmasterapi.TableNames.Games
 
 class DungeonGameTest extends AnyFunSpec with MockFactory {
 
@@ -24,7 +25,7 @@ class DungeonGameTest extends AnyFunSpec with MockFactory {
 
   abstract class ProxyGameProcessor extends GameProcessor[IO, TestGame, Depen1]
   abstract class ProxyRealGameProcessor extends GameProcessor[IO, Game, Depen1]
-  abstract class ProxyDataStore extends DataStore[IO, DynamoDBFacade[IO]]
+  abstract class ProxyDataStore extends DataStore[IO, DynamoDBFacade[IO], Games.type]
   abstract class ProxyDynamoFacade extends DynamoDBFacade[IO]
 
   val mockDynamoFacade = mock[ProxyDynamoFacade]
@@ -108,11 +109,10 @@ class DungeonGameTest extends AnyFunSpec with MockFactory {
 
           val expectedMessage = "Game Was Successfully Created"
 
-          val expectedResultMessage = ResponseMessage(expectedMessage)
+          val expectedResultMessage = ResponseMessage(expectedMessage, None)
 
           
           val actualResult = IOGameController.submitGame(nameOfGame).unsafeRunSync()
-
 
           assert(actualResult == expectedResultMessage)
         }

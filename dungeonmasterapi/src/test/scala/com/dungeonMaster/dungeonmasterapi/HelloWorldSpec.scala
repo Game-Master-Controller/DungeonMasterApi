@@ -5,14 +5,11 @@ import org.http4s._
 import org.http4s.implicits._
 import org.specs2.matcher.MatchResult
 
-class HelloWorldSpec extends org.specs2.mutable.Specification {
+class GameRoutesSpec extends org.specs2.mutable.Specification {
 
-  "HelloWorld" >> {
-    "return 200" >> {
-      uriReturns200()
-    }
-    "return hello world" >> {
-      uriReturnsHelloWorld()
+  "Game" >> {
+    "return success message" >> {
+      uriReturnsSuccessfulMessage()
     }
   }
 
@@ -22,9 +19,18 @@ class HelloWorldSpec extends org.specs2.mutable.Specification {
     DungeonmasterapiRoutes.helloWorldRoutes(helloWorld).orNotFound(getHW).unsafeRunSync()
   }
 
+  private[this] val retGameCreate: Response[IO] = {
+    val getHW = Request[IO](Method.POST, uri"/game/gameName")
+    DungeonmasterapiRoutes.gameRoutes.orNotFound(getHW).unsafeRunSync()
+  }
+
   private[this] def uriReturns200(): MatchResult[Status] =
     retHelloWorld.status must beEqualTo(Status.Ok)
 
   private[this] def uriReturnsHelloWorld(): MatchResult[String] =
     retHelloWorld.as[String].unsafeRunSync() must beEqualTo("{\"message\":\"Hello, world\"}")
+
+  private[this] def uriReturnsSuccessfulMessage(): MatchResult[String] =
+    retGameCreate.as[String].unsafeRunSync() must beEqualTo("{\"message\":\"Successful entry of gameName\"}")
+
 }

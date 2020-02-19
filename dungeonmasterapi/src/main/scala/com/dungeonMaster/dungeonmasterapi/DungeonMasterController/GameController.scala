@@ -2,46 +2,56 @@ package com.dungeonMaster.dungeonmasterapi
 
 import cats.data.EitherT
 import cats.effect._
+import com.dungeonMaster.dungeonmasterapi.TableNames.Games
+import cats.Monad
+import cats.Applicative
+import cats.Functor
 
-abstract class GameProcessor[F[+_], A, B] {
-  def submit(game: A)(implicit ds: B): EitherT[F,String, String]
+abstract class GameProcessor[D1] {
+  def submit[F[_]: ConcurrentEffect](game: Game)(implicit depen1: D1): EitherT[F,String, String]
 }
 
 object IOProcessors {
-  implicit object GameProcessor extends GameProcessor[IO, Game, DataStore[IO, DynamoDBFacade[IO]]] {
-    def submit(game: Game)(implicit ds: DataStore[IO, DynamoDBFacade[IO]]): EitherT[IO,String, String] = {
-      import com.dungeonMaster.dungeonmasterapi.DynamoDataStoreConfig.apply
-      ds.createEntry(game.name, None)
+  implicit def gameProcessor[F[_]: ConcurrentEffect] = new GameProcessor[DataStore[DynamoDBFacade[F], Games.type]] {
+    def submit(game: Game)(implicit ds: DataStore[DynamoDBFacade[F], Games.type], db: DynamoDBFacade[F]): EitherT[F,String, String] = {
+      ds.createEntry[F](game.name, None)
     }
   }
 }
 
+import IOProcessors._
+
 object Execs {
-  implicit class GameExec[A, B](underlying: A) {
-    def submitGame[F[+_]](implicit processors: GameProcessor[F, A, B], dependency: B): EitherT[F, String, String] = processors.submit(underlying)
+  implicit class GameExec[A](underlying: Game) {
+    import com.dungeonMaster.dungeonmasterapi.Main._
+    def submitGame[F[_]: ConcurrentEffect](implicit processors: GameProcessor[A], depen: A): EitherT[F, String, String] = processors.submit(underlying)
   }
 }
-abstract class GameController[F[_], C, D] {
-  def submitGame[B](gameName: String)(implicit gameProcessor: GameProcessor[IO, Game, B], depen: B): F[D]
+
+abstract class GameController[C, D, D1] {
+  def submitGame[F[_]: ConcurrentEffect](gameName: String)(implicit gameProcessor: GameProcessor[D1]): F[D]
 }
 
-case class ResponseMessage(msg: String)
+case class ResponseMessage(msg: String, error: Option[String] = None)
 
-package object Controllers {
-  implicit object IOGameController extends GameController[IO, Game, ResponseMessage] {
-    def submitGame[B](gameName: String)(implicit gameProcessor: GameProcessor[IO, Game, B], depen: B): IO[ResponseMessage] = {
+object IOGameControllers {
+  implicit def gameController[F[_]: ConcurrentEffect, Functor] = new GameController[Game, ResponseMessage, DataStore[DynamoDBFacade[F], Games.type]] {
+    def submitGame[B](gameName: String)
+      (
+        implicit gameProcessor: GameProcessor[DataStore[DynamoDBFacade[F],Games.type]],
+        depen: DynamoDBFacade[F],
+        ds: DataStore[DynamoDBFacade[F], Games.type])
+        : F[ResponseMessage] = {
       import com.dungeonMaster.dungeonmasterapi.Execs.GameExec
       import com.dungeonMaster.dungeonmasterapi.DataStores.DynamoDataStore
 
-      Game(gameName).submitGame[IO].value.map(resp => {
-        resp match {
-          case Left(error) => ResponseMessage("There Was An Error While Creating a Game")
-          case Right(message) => ResponseMessage("Game Was Successfully Created")
-        }
-      })
-      
+      gameProcessor.submit(Game(gameName)).fold[ResponseMessage](
+        (error) => ResponseMessage("There Was An Error While Creating a Game", Some(error)),
+        (msg) => ResponseMessage(msg, None)
+      )
     }
   }
+  
 }
 
 

@@ -12,6 +12,8 @@ resolvers += "Sonatype OSS Snapshots" at "https://oss.sonatype.org/content/repos
 resolvers += "Sonatype Releases" at "https://oss.sonatype.org/content/repositories/releases/"
 resolvers += "Artima Maven Repository" at "http://repo.artima.com/releases"
 
+//addCompilerPlugin("io.tryp" % "splain" % "0.5.1" cross CrossVersion.patch)
+
 lazy val main = (project in file("."))
   .settings(
     organization := "com.dungeonMaster",
