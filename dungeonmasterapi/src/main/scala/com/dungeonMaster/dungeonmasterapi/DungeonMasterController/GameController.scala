@@ -6,15 +6,17 @@ import com.dungeonMaster.dungeonmasterapi.TableNames.Games
 import cats.Monad
 import cats.Applicative
 import cats.Functor
+import cats.effect.{ConcurrentEffect, ContextShift, Timer}
 
-abstract class GameProcessor[D1] {
-  def submit[F[_]: ConcurrentEffect](game: Game)(implicit depen1: D1): EitherT[F,String, String]
+abstract class GameProcessor[F[_] :Async, D1] {
+  def submit(game: Game)(implicit depen1: D1): EitherT[F,String, String]
 }
 
 object IOProcessors {
-  implicit def gameProcessor[F[_]: ConcurrentEffect] = new GameProcessor[DataStore[DynamoDBFacade[F], Games.type]] {
-    def submit(game: Game)(implicit ds: DataStore[DynamoDBFacade[F], Games.type], db: DynamoDBFacade[F]): EitherT[F,String, String] = {
-      ds.createEntry[F](game.name, None)
+  implicit object IOGameProcessor extends GameProcessor[IO, DataStore[IO, DynamoDBFacade[IO]]] {
+    def submit(game: Game)(implicit ds: DataStore[IO, DynamoDBFacade[IO]]): EitherT[IO,String, String] = {
+      import com.dungeonMaster.dungeonmasterapi
+      ds.createEntry(game.name, None)
     }
   }
 }
@@ -22,9 +24,9 @@ object IOProcessors {
 import IOProcessors._
 
 object Execs {
-  implicit class GameExec[A](underlying: Game) {
+  implicit class GameExec[F[_]: Async, A](underlying: Game) {
     import com.dungeonMaster.dungeonmasterapi.Main._
-    def submitGame[F[_]: ConcurrentEffect](implicit processors: GameProcessor[A], depen: A): EitherT[F, String, String] = processors.submit(underlying)
+    def submitGame(implicit processors: GameProcessor[A], depen: A): EitherT[F, String, String] = processors.submit(underlying)
   }
 }
 

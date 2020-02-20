@@ -26,8 +26,8 @@ object TableNames {
   }
 }
 
-abstract class DataStore[B, C] {
-  def createEntry[F[_]: Async](index: String, values:Option[Seq[(String, Any)]])(implicit dependency: B): EitherT[F, String, String]
+abstract class DataStore[F[_]: Async ,B] {
+  def createEntry(index: String, values:Option[Seq[(String, Any)]])(implicit dependency: B): EitherT[F, String, String]
 }
 
 object DataStores {
@@ -39,8 +39,8 @@ object DataStores {
     lazy val facade: F1[DynamoDBFacade[F]] = DynamoDataStoreConfig.apply[F].addRegion(region).addTableName(Some(config.getString("game-table.name"))).connect[F, F1]
     facade
   }
-  implicit object DynamoDataStore extends DataStore[DynamoDBFacade[Async], Games.type] {    
-    def createEntry[F[_]: ConcurrentEffect](index: String, values:Option[Seq[(String, Any)]])(implicit dependency: DynamoDBFacade[F]): EitherT[F, String, String] = {
+  implicit object DynamoDataStore extends DataStore[IO, DynamoDBFacade[Async]] {    
+    def createEntry(index: String, values:Option[Seq[(String, Any)]])(implicit dependency: DynamoDBFacade[F]): EitherT[F, String, String] = {
       import com.dungeonMaster.dungeonmasterapi.USEAST1
       dependency.submitEntry(index, values)
     }
@@ -53,7 +53,7 @@ abstract class DynamoDBFacade[F[_]: Async] {
   val tableName: Option[String]
   def addTableName(tableName: Option[String]): DynamoDBFacade[F]
   def addRegion(region: Option[AWSRegion]): DynamoDBFacade[F]
-  def connect[F[_]: ConcurrentEffect, F1[_]](implicit dynamoDbProxy: DynamoDB): F1[DynamoDBFacade[F]]
+  def connect[F1[_]: Async:ConcurrentEffect](implicit dynamoDbProxy: DynamoDB): F1[DynamoDBFacade[F]]
   def submitEntry(index: String, values:Option[Seq[(String, Any)]])(implicit dynamoDbProxy: DynamoDB): EitherT[F, String, String]
 }
 
@@ -93,9 +93,9 @@ object DynamoDataStoreConfig {
       }
   }
 
-implicit def apply[F[_]: ConcurrentEffect]: DynamoDBFacade[F] = constructor[F]()
+implicit def apply[F[_]: ConcurrentEffect:Async]: DynamoDBFacade[F] = constructor[F]()
 
-  private def querryTable[F[_]: Async](config: Either[String ,Tuple2[AWSRegion, String]], dynamoDbProxy: DynamoDB): EitherT[F, String, Table] = {
+  private def querryTable[F[_]: Async:ConcurrentEffect](config: Either[String ,Tuple2[AWSRegion, String]], dynamoDbProxy: DynamoDB): EitherT[F, String, Table] = {
     val cbResponse: F[Either[String, Table]] = Async[F].async { cb =>
       val mabyTable: Either[String, Table] = for {
         tableNameAndRegion <- config
