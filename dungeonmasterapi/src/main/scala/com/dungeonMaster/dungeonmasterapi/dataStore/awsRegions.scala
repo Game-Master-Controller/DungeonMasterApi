@@ -7,8 +7,8 @@ abstract class AWSRegion {
   val region: Region
 }
 
-case class USEAST1(regionName: String = "us-east-1", region: Region = Region.US_EAST_1) extends AWSRegion
-
-object AWSRegion {
-  implicit val usEast1 = USEAST1()
+abstract class USEAST1 extends AWSRegion
+case object USEAST1 extends USEAST1 {
+  val regionName: String = "us-east-1"
+  val region: Region = Region.US_EAST_1
 }

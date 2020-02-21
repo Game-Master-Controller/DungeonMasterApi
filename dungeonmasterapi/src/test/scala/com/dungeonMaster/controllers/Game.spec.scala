@@ -11,7 +11,6 @@ import cats.effect.{IO, Async}
 
 class GameTest extends AnyFunSpec with MockFactory {
   describe("Game") {
-    // val game = Game[IO]
     describe("create") {
       it("Should create a new game because there is no existing game") {
         assert(true)

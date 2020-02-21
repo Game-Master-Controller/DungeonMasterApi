@@ -28,31 +28,25 @@ import org.http4s.client.dsl.Http4sClientDsl
 import org.http4s.Method._
 import org.http4s.circe._
 import com.dungeonMaster.dungeonmasterapi.Jokes.Joke
-import com.dungeonMaster.dungeonmasterapi.IOGameControllers._
-import com.dungeonMaster.dungeonmasterapi.IOGameControllers._
-import com.dungeonMaster.dungeonmasterapi.DataStores._
-import com.dungeonMaster.dungeonmasterapi.IOProcessors._
+import com.dungeonMaster.dungeonmasterapi.DataStore._
 import cats.effect.ConcurrentEffect
 import cats.effect.{ConcurrentEffect, ContextShift, Timer}
-import com.dungeonMaster.dungeonmasterapi.IOProcessors._
 import cats.Functor
+import com.dungeonMaster.dungeonmasterapi.GameProcessor._
 
 object DungeonmasterapiRoutes {
 
-  def gameRoutes[F[_]:Async:ConcurrentEffect:Functor](implicit T: Timer[F], C: ContextShift[F]): HttpRoutes[F] = {
+  def gameRoutes[F[_]:Async:ConcurrentEffect](implicit gc: GameController[F, ResponseMessage]): HttpRoutes[F] = {
     val dsl = new Http4sDsl[F]{}
     import dsl._
-    //val controller = implicitly[GameController[Game, ResponseMessage, DynamoDBFacade[F]]]
-    val controller = IOGameControllers.IOGameController
 
-    import com.dungeonMaster.dungeonmasterapi.IOProcessors._
-
-    //val gp: GameProcessor[DataStore[DynamoDBFacade[F], Games.type]] = implicitly
+    import com.dungeonMaster.dungeonmasterapi.GameController
+    import com.dungeonMaster.dungeonmasterapi.GameController._
 
     HttpRoutes.of[F] {
       case POST -> Root / "game" / nameOfGame =>
         for {
-          respMessage <- controller.submitGame[F](nameOfGame)
+          respMessage <- gc.submitGame(nameOfGame)
           resp <- Ok(respMessage)
         } yield resp
     }

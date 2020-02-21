@@ -5,6 +5,9 @@ import cats.implicits._
 import io.circe.{Encoder, Json}
 import org.http4s.EntityEncoder
 import org.http4s.circe._
+
+object stuff {}
+
 /*
 trait Game[F[_]]{
   def create(n: Game.GameName)(): F[Game.ResponseMessage] 

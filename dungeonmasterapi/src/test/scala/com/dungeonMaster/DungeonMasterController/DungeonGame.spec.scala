@@ -11,32 +11,22 @@ import cats.effect.{IO}
 import com.dungeonMaster.dungeonmasterapi.Execs.GameExec
 import cats.data.EitherT
 import com.dungeonMaster.dungeonmasterapi.TableNames.Games
+import com.dungeonMaster.dungeonmasterapi.Execs.GameExec
+import cats.effect.IO._
 
 class DungeonGameTest extends AnyFunSpec with MockFactory {
-
-  case class TestGame(name: String)
-
-  case class Depen1()
-  implicit object Depen1 extends Depen1
 
   implicit val ecc = ExecutionContext.global
   implicit val timer: Timer[IO] = IO.timer(ExecutionContext.global)
   implicit val cs: ContextShift[IO] = IO.contextShift(implicitly[ExecutionContext])
 
-  abstract class ProxyGameProcessor extends GameProcessor[IO, TestGame, Depen1]
-  abstract class ProxyRealGameProcessor extends GameProcessor[IO, Game, Depen1]
-  abstract class ProxyDataStore extends DataStore[IO, DynamoDBFacade[IO], Games.type]
+  abstract class ProxyGameProcessor extends GameProcessor[IO]
+  abstract class ProxyDataStore extends DataStore[IO]
   abstract class ProxyDynamoFacade extends DynamoDBFacade[IO]
 
-  val mockDynamoFacade = mock[ProxyDynamoFacade]
-
-  implicit val mockDataStore = mock[ProxyDataStore]
-
-  implicit val mockGameProcessor: GameProcessor[IO, TestGame, Depen1] = mock[ProxyGameProcessor]
-
-  implicit val mockGameProcessorForGame: GameProcessor[IO, Game, Depen1] = mock[ProxyRealGameProcessor]
-
-  
+  implicit val mockDynamoFacade = mock[ProxyDynamoFacade]
+  implicit val mockDataStore: DataStore[IO] = mock[ProxyDataStore]
+  implicit val mockGameProcessor: GameProcessor[IO] = mock[ProxyGameProcessor]
   implicit val mockDynamoDpProxy = mock[DynamoDB]
 
   describe("DungeonGame") {
@@ -45,18 +35,18 @@ class DungeonGameTest extends AnyFunSpec with MockFactory {
         describe("submit") {
           it("Should evaluate to a program that evaluates successful.") {
             val testName = "test game"
-            val testGame = TestGame(testName)
+            val testGame: Game = Game(testName)
 
             val testResult = "result"
             val mabyResult : Either[String, String] = Right(testResult)
 
             val resultingProgram = EitherT(IO(mabyResult))
 
-            (mockGameProcessor.submit (_: TestGame)(_: Depen1))
-              .expects(testGame, Depen1)
+            (mockGameProcessor.submit (_: Game))
+              .expects(testGame)
               .returning(resultingProgram)
-
-            val result = testGame.submitGame[IO].value.unsafeRunSync().right.get
+  
+            val result = testGame.submitGame.value.unsafeRunSync().right.get
 
             assert(result == testResult)
           }
@@ -65,7 +55,6 @@ class DungeonGameTest extends AnyFunSpec with MockFactory {
     }
     describe("IOProcessors") {
       describe("Dnd5eProcessor") {
-        import com.dungeonMaster.dungeonmasterapi.IOProcessors.GameProcessor
         val nameOfGame = "game name"
         val dndGame = Game(nameOfGame)
         val value = List(("key", "value"))
@@ -77,11 +66,14 @@ class DungeonGameTest extends AnyFunSpec with MockFactory {
         describe("submit") {
           it("Should evaluate to a program that is successful.") {
 
-            (mockDataStore.createEntry (_:String, _:Option[Seq[(String, Any)]])(_: DynamoDBFacade[IO]))
-              .expects(dndGame.name, None, *)
+            (mockDataStore.createEntry (_:String, _:Option[Seq[(String, Any)]]))
+              .expects(dndGame.name, None)
               .returning(resultingProgram)
 
-            val result = GameProcessor.submit(dndGame).value.unsafeRunSync().right.get
+            import cats.effect.Async
+
+            val gameProcessor = GameProcessor.apply[IO]
+            val result = gameProcessor.submit(dndGame).value.unsafeRunSync().right.get
 
             assert(result == testResult)
           }
@@ -95,24 +87,23 @@ class DungeonGameTest extends AnyFunSpec with MockFactory {
 
           val expectedGame = Game(nameOfGame)
 
-          val result = "result"
-
-          val mabyResult: Either[String, String] = Right(result)
-
-          val resultingProgram = EitherT(IO(mabyResult))
-
-          (mockGameProcessorForGame.submit (_:Game)(_: Depen1))
-            .expects(expectedGame, Depen1)
-            .returning(resultingProgram)
-
-          import com.dungeonMaster.dungeonmasterapi.Controllers.IOGameController
+          import com.dungeonMaster.dungeonmasterapi.Execs.GameExec
 
           val expectedMessage = "Game Was Successfully Created"
 
+          val mabyResult: Either[String, String] = Right(expectedMessage)
+
+          val resultingProgram = EitherT(IO(mabyResult))
+
+          (mockGameProcessor.submit (_:Game))
+            .expects(expectedGame)
+            .returning(resultingProgram)
+
           val expectedResultMessage = ResponseMessage(expectedMessage, None)
 
-          
-          val actualResult = IOGameController.submitGame(nameOfGame).unsafeRunSync()
+          val controller = GameController.apply[IO]
+
+          val actualResult = controller.submitGame(nameOfGame).unsafeRunSync()
 
           assert(actualResult == expectedResultMessage)
         }
